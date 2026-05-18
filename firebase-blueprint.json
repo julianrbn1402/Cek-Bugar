@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Records of operator fitness check in and out activities.",
+      "type": "object",
+      "properties": {
+        "operatorId": {
+          "type": "string",
+          "description": "The unique ID of the operator."
+        },
+        "operatorName": {
+          "type": "string",
+          "description": "The name of the operator."
+        },
+        "checkInTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the operator checked in."
+        },
+        "checkOutTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the operator checked out."
+        },
+        "durationMinutes": {
+          "type": "number",
+          "description": "Calculated duration in minutes."
+        },
+        "shift": {
+          "type": "integer",
+          "description": "Shift number (1 or 2)."
+        },
+        "date": {
+          "type": "string",
+          "description": "The date of the activity (YYYY-MM-DD)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["IN", "OUT"],
+          "description": "Current status of the attendance record."
+        }
+      },
+      "required": ["operatorId", "operatorName", "checkInTime", "shift", "date", "status"]
+    }
+  },
+  "firestore": {
+    "attendance": {
+      "schema": "Attendance",
+      "description": "Collection of all attendance records."
+    }
+  }
+}

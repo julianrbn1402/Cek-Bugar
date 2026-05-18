@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidAttendance(data) {
+      return data.operatorId is string && data.operatorId.size() <= 20 &&
+             data.operatorName is string && data.operatorName.size() <= 100 &&
+             data.checkInTime is timestamp &&
+             data.shift in [1, 2] &&
+             data.date is string && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+             data.status in ['IN', 'OUT'] &&
+             (data.checkOutTime == null || data.checkOutTime is timestamp) &&
+             (data.durationMinutes == null || data.durationMinutes is number);
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Attendance collection
+    match /attendance/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && 
+                      isValidAttendance(incoming()) &&
+                      incoming().status == 'IN' &&
+                      incoming().checkInTime == request.time;
+      allow update: if isSignedIn() &&
+                      isValidAttendance(incoming()) &&
+                      (
+                        // Action: Check Out
+                        (existing().status == 'IN' && 
+                         incoming().status == 'OUT' &&
+                         incoming().checkOutTime == request.time &&
+                         incoming().operatorId == existing().operatorId &&
+                         incoming().checkInTime == existing().checkInTime &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'checkOutTime', 'durationMinutes']))
+                      );
+    }
+  }
+}

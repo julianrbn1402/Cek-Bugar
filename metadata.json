@@ -1,0 +1,10 @@
+{
+  "name": "Cek Kebugaran",
+  "description": "Mobile app for tracking operator fitness check duration using QR codes with shift-based reporting.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -298,7 +298,7 @@ export default function App() {
                 <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 flex gap-3">
                   <AlertCircle className="w-5 h-5 text-orange-600 shrink-0" />
                   <p className="text-[10px] text-orange-800 leading-relaxed font-bold uppercase tracking-tight">
-                    Ensure QR Format: (ID) - SPRO - OPRT - ARIA
+                    Ensure QR Format: ID - SPRO - OPRT - ARIA
                   </p>
                 </div>
               </motion.div>

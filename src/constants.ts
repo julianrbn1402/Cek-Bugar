@@ -292,4 +292,4 @@ export const SHIFT_TIMES = {
   SHIFT_2: { start: 18, end: 6 },
 };
 
-export const QR_FORMAT_REGEX = /^\((.+)\) - SPRO - OPRT - ARIA$/;
+export const QR_FORMAT_REGEX = /^(.+) - SPRO - OPRT - ARIA$/;

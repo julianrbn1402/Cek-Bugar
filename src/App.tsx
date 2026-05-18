@@ -483,21 +483,62 @@ function Scanner({ onResult }: { onResult: (text: string) => void }) {
 }
 
 function LiveTimer({ checkInTime }: { checkInTime: Date }) {
-  const [seconds, setSeconds] = useState(0);
-  const notifiedRef = useRef(false);
+  const [seconds, setSeconds] = useState(() => differenceInSeconds(new Date(), checkInTime));
+  const lastAlertMinuteRef = useRef(Math.floor(differenceInSeconds(new Date(), checkInTime) / 60) - 1);
 
   useEffect(() => {
+    const playLoudAlert = () => {
+      try {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'square';
+        // Emergency siren sound
+        osc.frequency.setValueAtTime(600, ctx.currentTime);
+        for(let i = 0; i < 2; i += 0.5) {
+          osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + i + 0.25);
+          osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + i + 0.5);
+        }
+
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 2.5);
+
+        osc.connect(gain).connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 2.5);
+      } catch (e) {
+        console.error('Audio alert failed', e);
+      }
+    };
+
     const interval = setInterval(() => {
-      const diff = differenceInSeconds(new Date(), checkInTime);
-      setSeconds(diff);
+      const currentSeconds = differenceInSeconds(new Date(), checkInTime);
+      setSeconds(currentSeconds);
       
-      if (diff >= 240 && !notifiedRef.current) {
-        notifiedRef.current = true;
-        toast.warning('Peringatan: Waktu cek kebugaran telah mencapai 4 menit!', {
-          duration: 10000,
-          icon: <AlertCircle className="w-5 h-5 text-orange-600" />
+      const currentMin = Math.floor(currentSeconds / 60);
+      
+      if (currentMin >= 4 && currentMin > lastAlertMinuteRef.current) {
+        lastAlertMinuteRef.current = currentMin;
+        
+        toast.error(`PERINGATAN: Waktu cek kebugaran sudah ${currentMin} menit!`, {
+          duration: 20000,
+          icon: <AlertCircle className="w-6 h-6 text-white" />,
+          style: { 
+            backgroundColor: '#ef4444', 
+            color: 'white',
+            fontWeight: '900',
+            fontSize: '14px',
+            border: '2px solid white'
+          }
         });
-        if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+
+        playLoudAlert();
+        if ('vibrate' in navigator) {
+          navigator.vibrate([500, 200, 500, 200, 500, 200, 500]);
+        }
       }
     }, 1000);
 

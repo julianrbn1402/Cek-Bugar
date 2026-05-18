@@ -6,35 +6,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  addDoc, 
-  updateDoc, 
-  doc, 
-  Timestamp, 
-  orderBy, 
-  onSnapshot,
-  limit,
-  serverTimestamp
-} from 'firebase/firestore';
-import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  onAuthStateChanged,
-  User
-} from 'firebase/auth';
-import { 
   format, 
   differenceInMinutes, 
   differenceInSeconds, 
-  startOfDay, 
-  endOfDay, 
-  isWithinInterval,
-  setHours,
-  addDays,
-  subDays
+  isAfter,
+  subHours
 } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { Toaster, toast } from 'sonner';
@@ -45,16 +21,11 @@ import {
   History, 
   AlertCircle, 
   CheckCircle2, 
-  User as UserIcon,
-  LogIn,
   Sun,
-  Moon,
   ShieldCheck,
-  ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
-import { OPERATORS, SHIFT_TIMES, QR_FORMAT_REGEX } from './constants';
+import { OPERATORS, QR_FORMAT_REGEX } from './constants';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -66,8 +37,8 @@ interface AttendanceRecord {
   id: string;
   operatorId: string;
   operatorName: string;
-  checkInTime: Timestamp;
-  checkOutTime: Timestamp | null;
+  checkInTime: string | Date;
+  checkOutTime: string | Date | null;
   durationMinutes: number | null;
   shift: 1 | 2;
   date: string;
@@ -81,56 +52,48 @@ const determineShift = (date: Date): 1 | 2 => {
 };
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<'home' | 'scan' | 'active' | 'recap'>('home');
   const [activeSessions, setActiveSessions] = useState<AttendanceRecord[]>([]);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Auth listener
+  // Sync data with LocalStorage and apply 24h retention
   useEffect(() => {
-    return onAuthStateChanged(auth, (u) => {
-      setUser(u);
+    const loadAndCleanup = () => {
+      const stored = localStorage.getItem('fitcheck_data_v2');
+      if (stored) {
+        try {
+          const allData: AttendanceRecord[] = JSON.parse(stored);
+          const now = new Date();
+          const oneDayAgo = subHours(now, 24);
+
+          // Retention logic: only keep records from the last 24 hours
+          const recentData = allData.filter(r => {
+            const checkInTime = new Date(r.checkInTime as any);
+            return isAfter(checkInTime, oneDayAgo);
+          });
+
+          const active = recentData.filter(r => r.status === 'IN');
+          const completed = recentData.filter(r => r.status === 'OUT');
+
+          setActiveSessions(active);
+          setRecords(completed);
+          
+          // Save cleaned data back to storage
+          localStorage.setItem('fitcheck_data_v2', JSON.stringify(recentData));
+        } catch (e) {
+          console.error('Data corrupted, resetting storage', e);
+          localStorage.removeItem('fitcheck_data_v2');
+        }
+      }
       setLoading(false);
-    });
+    };
+
+    loadAndCleanup();
   }, []);
 
-  // Active sessions listener
-  useEffect(() => {
-    if (!user) return;
-
-    // Check for all 'IN' status sessions
-    const q = query(
-      collection(db, 'attendance'),
-      where('status', '==', 'IN'),
-      orderBy('checkInTime', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceRecord));
-      setActiveSessions(docs);
-      
-      // Auto-switch view if sessions exist and we are on home/scan
-      if (docs.length > 0) {
-        if (view === 'home') setView('active');
-      } else {
-        if (view === 'active') setView('home');
-      }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'attendance');
-    });
-
-    return () => unsubscribe();
-  }, [user, view]);
-
-  // Handle Login
-  const handleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error('Login failed', error);
-      toast.error('Gagal masuk');
-    }
+  const saveToStorage = (allRecords: AttendanceRecord[]) => {
+    localStorage.setItem('fitcheck_data_v2', JSON.stringify(allRecords));
   };
 
   const handleScanSuccess = async (decodedText: string) => {
@@ -142,13 +105,11 @@ export default function App() {
 
     const operatorId = match[1];
     const operatorName = OPERATORS[operatorId];
-
     if (!operatorName) {
       toast.error(`Operator ID ${operatorId} tidak ditemukan`);
       return;
     }
 
-    // Check if THIS operator already has an active session to prevent double tapping
     const alreadyActive = activeSessions.find(s => s.operatorId === operatorId);
     if (alreadyActive) {
       toast.error(`${operatorName} sudah dalam sesi aktif.`);
@@ -160,43 +121,51 @@ export default function App() {
     const shift = determineShift(now);
     const dateStr = format(now, 'yyyy-MM-dd');
 
-    try {
-      // Create new session
-      await addDoc(collection(db, 'attendance'), {
-        operatorId,
-        operatorName,
-        checkInTime: serverTimestamp(),
-        checkOutTime: null,
-        durationMinutes: null,
-        shift,
-        date: dateStr,
-        status: 'IN'
-      });
+    const newRecord: AttendanceRecord = {
+      id: Math.random().toString(36).substr(2, 9),
+      operatorId,
+      operatorName,
+      checkInTime: now,
+      checkOutTime: null,
+      durationMinutes: null,
+      shift,
+      date: dateStr,
+      status: 'IN'
+    };
 
-      toast.success(`Check-in berhasil: ${operatorName}`);
-      setView('active');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'attendance');
-      toast.error('Gagal menyimpan data');
-    }
+    const newActiveList = [newRecord, ...activeSessions];
+    setActiveSessions(newActiveList);
+    
+    // Persist all data combined
+    const currentStored: AttendanceRecord[] = JSON.parse(localStorage.getItem('fitcheck_data_v2') || '[]');
+    saveToStorage([newRecord, ...currentStored]);
+
+    toast.success(`Check-in berhasil: ${operatorName}`);
+    setView('active');
   };
 
-  const handleFinishSession = async (session: AttendanceRecord) => {
+  const handleFinishSession = (session: AttendanceRecord) => {
     const now = new Date();
-    const duration = differenceInMinutes(now, session.checkInTime.toDate());
+    const checkInTime = new Date(session.checkInTime as any);
+    const duration = differenceInMinutes(now, checkInTime);
     
-    try {
-      await updateDoc(doc(db, 'attendance', session.id), {
-        status: 'OUT',
-        checkOutTime: serverTimestamp(),
-        durationMinutes: duration
-      });
+    const updatedRecord: AttendanceRecord = {
+      ...session,
+      status: 'OUT',
+      checkOutTime: now,
+      durationMinutes: duration
+    };
 
-      toast.success(`Check-out berhasil: ${session.operatorName}. Durasi: ${duration} menit.`);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'attendance');
-      toast.error('Gagal memproses check-out');
-    }
+    // Update state
+    setRecords(prev => [updatedRecord, ...prev]);
+    setActiveSessions(prev => prev.filter(s => s.id !== session.id));
+
+    // Persist
+    const currentStored: AttendanceRecord[] = JSON.parse(localStorage.getItem('fitcheck_data_v2') || '[]');
+    const newStored = currentStored.map(r => r.id === session.id ? updatedRecord : r);
+    saveToStorage(newStored);
+
+    toast.success(`Check-out berhasil: ${session.operatorName}. Durasi: ${duration} menit.`);
   };
 
   if (loading) {
@@ -207,34 +176,6 @@ export default function App() {
           transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
           className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full"
         />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-sm w-full bg-white p-8 rounded-3xl shadow-xl shadow-indigo-100/50"
-        >
-          <div className="w-20 h-20 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <ShieldCheck className="w-10 h-10 text-indigo-600" />
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-1">Cek Kebugaran</h1>
-          <p className="text-indigo-600 font-extrabold text-[10px] uppercase tracking-[0.3em] mb-4">Say No to Fatigue</p>
-          <p className="text-slate-500 mb-8 leading-relaxed">
-            Silakan masuk untuk mulai mencatat aktivitas cek kebugaran operator.
-          </p>
-          <button
-            onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-3 bg-indigo-600 text-white font-semibold py-4 rounded-2xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95"
-          >
-            <LogIn className="w-5 h-5" />
-            Masuk dengan Google
-          </button>
-        </motion.div>
       </div>
     );
   }
@@ -262,12 +203,6 @@ export default function App() {
               <p className="text-xs font-mono font-bold">{format(new Date(), 'HH:mm')}</p>
             </div>
           </div>
-          <button 
-            onClick={() => auth.signOut()}
-            className="absolute top-4 right-4 text-white/50 hover:text-white transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
         </header>
 
         <main className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 relative">
@@ -382,7 +317,7 @@ export default function App() {
                     <div key={session.id} className="bg-white p-6 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col gap-6">
                       <div className="flex justify-between items-start">
                         <span className="text-[10px] bg-emerald-100 text-emerald-700 font-black px-2 py-1 rounded-lg uppercase tracking-widest">Active Session</span>
-                        <span className="text-[10px] text-slate-400 font-mono font-bold">{format(session.checkInTime.toDate(), 'hh:mm:ss a')}</span>
+                        <span className="text-[10px] text-slate-400 font-mono font-bold">{format(new Date(session.checkInTime as any), 'hh:mm:ss a')}</span>
                       </div>
                       
                       <div className="flex flex-col">
@@ -392,7 +327,7 @@ export default function App() {
 
                       <div className="h-px bg-slate-50 w-full" />
 
-                      <LiveTimer checkInTime={session.checkInTime.toDate()} />
+                      <LiveTimer checkInTime={new Date(session.checkInTime as any)} />
 
                       <button 
                         onClick={() => handleFinishSession(session)}
@@ -428,7 +363,7 @@ export default function App() {
                   <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Operational Dashboard</h3>
                   <div className="w-10"></div>
                 </div>
-                <RecapView onBack={() => setView('home')} />
+                <RecapView records={records} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -572,29 +507,7 @@ function LiveTimer({ checkInTime }: { checkInTime: Date }) {
   );
 }
 
-function RecapView({ onBack }: { onBack: () => void }) {
-  const [records, setRecords] = useState<AttendanceRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const q = query(
-      collection(db, 'attendance'),
-      where('status', '==', 'OUT'),
-      orderBy('checkInTime', 'desc'),
-      limit(500) // Increase limit for export
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceRecord));
-      setRecords(data);
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'attendance');
-    });
-
-    return () => unsubscribe();
-  }, []);
-
+function RecapView({ records }: { records: AttendanceRecord[] }) {
   const handleDownloadExcel = () => {
     if (records.length === 0) {
       toast.error('Tidak ada data untuk diunduh');
@@ -606,8 +519,8 @@ function RecapView({ onBack }: { onBack: () => void }) {
       'Nama Operator': r.operatorName,
       'Tanggal': r.date,
       'Shift': r.shift,
-      'Check In': r.checkInTime ? format(r.checkInTime.toDate(), 'HH:mm:ss') : '-',
-      'Check Out': r.checkOutTime ? format(r.checkOutTime.toDate(), 'HH:mm:ss') : '-',
+      'Check In': r.checkInTime ? format(new Date(r.checkInTime as any), 'HH:mm:ss') : '-',
+      'Check Out': r.checkOutTime ? format(new Date(r.checkOutTime as any), 'HH:mm:ss') : '-',
       'Durasi (Menit)': r.durationMinutes || 0,
       'Status': (r.durationMinutes || 0) >= 8 ? 'ALERT' : 'COMPLIANT'
     }));
@@ -626,13 +539,6 @@ function RecapView({ onBack }: { onBack: () => void }) {
   const getShiftData = (shift: 1 | 2) => {
     return records.filter(r => r.shift === shift);
   };
-
-  if (loading) return (
-    <div className="p-10 flex flex-col items-center justify-center gap-4">
-      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fetching Logs...</span>
-    </div>
-  );
 
   return (
     <div className="flex flex-col gap-8 pb-10">

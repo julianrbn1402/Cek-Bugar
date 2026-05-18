@@ -265,7 +265,7 @@ export default function App() {
                     {[
                       { icon: QrCode, text: "Scan QR operator badge", color: "text-blue-600", bg: "bg-blue-50" },
                       { icon: Timer, text: "Wait for fitness evaluation", color: "text-slate-600", bg: "bg-slate-100" },
-                      { icon: AlertCircle, text: "Max evaluation time: 8 min", color: "text-orange-600", bg: "bg-orange-50" }
+                      { icon: AlertCircle, text: "Max evaluation time: 4 min", color: "text-orange-600", bg: "bg-orange-50" }
                     ].map((step, i) => (
                       <div key={i} className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-slate-100">
                         <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", step.bg)}>
@@ -304,7 +304,7 @@ export default function App() {
               </motion.div>
             )}
 
-            {view === 'active' && activeSessions.length > 0 && (
+            {view === 'active' && (
               <motion.div
                 key="active"
                 initial={{ opacity: 0, y: 10 }}
@@ -312,41 +312,59 @@ export default function App() {
                 exit={{ opacity: 0, y: -10 }}
                 className="flex flex-col gap-6"
               >
-                <div className="flex flex-col gap-4">
-                  {activeSessions.map((session) => (
-                    <div key={session.id} className="bg-white p-6 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col gap-6">
-                      <div className="flex justify-between items-start">
-                        <span className="text-[10px] bg-emerald-100 text-emerald-700 font-black px-2 py-1 rounded-lg uppercase tracking-widest">Active Session</span>
-                        <span className="text-[10px] text-slate-400 font-mono font-bold">{format(new Date(session.checkInTime as any), 'hh:mm:ss a')}</span>
+                {activeSessions.length > 0 ? (
+                  <div className="flex flex-col gap-4">
+                    {activeSessions.map((session) => (
+                      <div key={session.id} className="bg-white p-6 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col gap-6">
+                        <div className="flex justify-between items-start">
+                          <span className="text-[10px] bg-emerald-100 text-emerald-700 font-black px-2 py-1 rounded-lg uppercase tracking-widest">Active Session</span>
+                          <span className="text-[10px] text-slate-400 font-mono font-bold">{format(new Date(session.checkInTime as any), 'hh:mm:ss a')}</span>
+                        </div>
+                        
+                        <div className="flex flex-col">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">{session.operatorId} - SPRO - OPRT - ARIA</p>
+                          <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none truncate">{session.operatorName}</h3>
+                        </div>
+
+                        <div className="h-px bg-slate-50 w-full" />
+
+                        <LiveTimer checkInTime={new Date(session.checkInTime as any)} />
+
+                        <button 
+                          onClick={() => handleFinishSession(session)}
+                          className="w-full flex items-center justify-center gap-3 bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-200 active:scale-95 transition-all text-sm uppercase tracking-widest"
+                        >
+                          <CheckCircle2 className="w-5 h-5" />
+                          Finish Activity
+                        </button>
                       </div>
-                      
-                      <div className="flex flex-col">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">{session.operatorId} - SPRO - OPRT - ARIA</p>
-                        <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none truncate">{session.operatorName}</h3>
-                      </div>
-
-                      <div className="h-px bg-slate-50 w-full" />
-
-                      <LiveTimer checkInTime={new Date(session.checkInTime as any)} />
-
-                      <button 
-                        onClick={() => handleFinishSession(session)}
-                        className="w-full flex items-center justify-center gap-3 bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-200 active:scale-95 transition-all text-sm uppercase tracking-widest"
-                      >
-                        <CheckCircle2 className="w-5 h-5" />
-                        Finish Activity
-                      </button>
+                    ))}
+                    
+                    <button 
+                      onClick={() => setView('home')}
+                      className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-slate-400 font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all"
+                    >
+                      <QrCode className="w-4 h-4" />
+                      Scan Operator Lain
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-white p-10 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col items-center text-center gap-6">
+                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center">
+                      <Timer className="w-10 h-10 text-slate-300" />
                     </div>
-                  ))}
-                  
-                  <button 
-                    onClick={() => setView('scan')}
-                    className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-slate-400 font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all"
-                  >
-                    <QrCode className="w-4 h-4" />
-                    Scan Operator Lain
-                  </button>
-                </div>
+                    <div className="flex flex-col gap-2">
+                      <h3 className="text-xl font-black text-slate-800 tracking-tight">Tidak Ada Sesi Aktif</h3>
+                      <p className="text-sm text-slate-500 leading-relaxed font-medium">Semua operator saat ini sedang tidak dalam sesi pemeriksaan kesehatan.</p>
+                    </div>
+                    <button 
+                      onClick={() => setView('home')}
+                      className="mt-2 flex items-center justify-center gap-3 bg-indigo-600 text-white font-black px-8 py-4 rounded-2xl shadow-lg shadow-indigo-100 active:scale-95 transition-all text-xs uppercase tracking-widest"
+                    >
+                      Mulai Scan Baru
+                    </button>
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -370,7 +388,7 @@ export default function App() {
         </main>
 
         {/* Footer Nav */}
-        <nav className="bg-white border-t border-slate-100 px-10 py-5 flex items-center justify-between shadow-[0_-10px_20px_rgba(0,0,0,0.02)] shrink-0">
+        <nav className="bg-white border-t border-slate-100 px-6 py-5 flex items-center justify-around shadow-[0_-10px_20px_rgba(0,0,0,0.02)] shrink-0">
           <button 
             onClick={() => setView('home')} 
             className={cn(
@@ -381,9 +399,23 @@ export default function App() {
             <QrCode className="w-6 h-6" strokeWidth={view === 'home' ? 2.5 : 2} />
             <span className="text-[10px] font-black uppercase tracking-widest">Scan</span>
           </button>
-          
-          <div className="h-8 w-px bg-slate-100" />
 
+          <button 
+            onClick={() => setView('active')} 
+            className={cn(
+              "flex flex-col items-center gap-1.5 transition-all duration-300 relative",
+              view === 'active' ? "text-[#2563EB] scale-110" : "text-slate-300 hover:text-slate-400"
+            )}
+          >
+            <Timer className="w-6 h-6" strokeWidth={view === 'active' ? 2.5 : 2} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Active</span>
+            {activeSessions.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 text-white text-[8px] font-black rounded-full flex items-center justify-center animate-bounce">
+                {activeSessions.length}
+              </span>
+            )}
+          </button>
+          
           <button 
             onClick={() => setView('recap')} 
             className={cn(
@@ -459,9 +491,9 @@ function LiveTimer({ checkInTime }: { checkInTime: Date }) {
       const diff = differenceInSeconds(new Date(), checkInTime);
       setSeconds(diff);
       
-      if (diff >= 480 && !notifiedRef.current) {
+      if (diff >= 240 && !notifiedRef.current) {
         notifiedRef.current = true;
-        toast.warning('Peringatan: Waktu cek kebugaran telah mencapai 8 menit!', {
+        toast.warning('Peringatan: Waktu cek kebugaran telah mencapai 4 menit!', {
           duration: 10000,
           icon: <AlertCircle className="w-5 h-5 text-orange-600" />
         });
@@ -474,7 +506,7 @@ function LiveTimer({ checkInTime }: { checkInTime: Date }) {
 
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
-  const isOvertime = mins >= 8;
+  const isOvertime = mins >= 4;
 
   return (
     <div className="flex items-center justify-between bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
@@ -500,7 +532,7 @@ function LiveTimer({ checkInTime }: { checkInTime: Date }) {
       {isOvertime && (
         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-orange-600 px-3 py-1 rounded-full border-2 border-white shadow-xl z-20">
           <div className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-          <span className="text-[9px] font-black text-white uppercase tracking-widest whitespace-nowrap">Exceeded 8 Min Limit</span>
+          <span className="text-[9px] font-black text-white uppercase tracking-widest whitespace-nowrap">Exceeded 4 Min Limit</span>
         </div>
       )}
     </div>
@@ -522,7 +554,7 @@ function RecapView({ records }: { records: AttendanceRecord[] }) {
       'Check In': r.checkInTime ? format(new Date(r.checkInTime as any), 'HH:mm:ss') : '-',
       'Check Out': r.checkOutTime ? format(new Date(r.checkOutTime as any), 'HH:mm:ss') : '-',
       'Durasi (Menit)': r.durationMinutes || 0,
-      'Status': (r.durationMinutes || 0) >= 8 ? 'ALERT' : 'COMPLIANT'
+      'Status': (r.durationMinutes || 0) >= 4 ? 'ALERT' : 'COMPLIANT'
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -591,9 +623,9 @@ function RecapView({ records }: { records: AttendanceRecord[] }) {
                   <span className="text-sm font-mono font-bold text-slate-800">{String(Math.floor((r.durationMinutes || 0))).padStart(2, '0')}:00</span>
                   <span className={cn(
                     "text-[8px] font-black uppercase px-2 py-0.5 rounded-md tracking-tighter mt-1",
-                    (r.durationMinutes || 0) >= 8 ? "bg-orange-50 text-orange-600" : "bg-emerald-50 text-emerald-600"
+                    (r.durationMinutes || 0) >= 4 ? "bg-orange-50 text-orange-600" : "bg-emerald-50 text-emerald-600"
                   )}>
-                    {(r.durationMinutes || 0) >= 8 ? "Alert" : "Compliant"}
+                    {(r.durationMinutes || 0) >= 4 ? "Alert" : "Compliant"}
                   </span>
                 </div>
               </div>
@@ -610,7 +642,7 @@ function RecapCard({ shift, data, isActive }: { shift: 1 | 2; data: AttendanceRe
     ? (data.reduce((acc, curr) => acc + (curr.durationMinutes || 0), 0) / data.length).toFixed(1)
     : "0.0";
   
-  const alertCount = data.filter(r => (r.durationMinutes || 0) >= 8).length;
+  const alertCount = data.filter(r => (r.durationMinutes || 0) >= 4).length;
 
   return (
     <div className={cn(
